@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(lldb) Launch", // 配置名称，将会在启动配置的下拉菜单中显示
+            "type": "lldb", // 配置类型，不同编程语言不同,该项由CodeLLDB插件提供
+            "request": "launch", // 可以为launch（启动）或attach（附加） 
+            "program": "${fileDirname}/bin/${fileBasenameNoExtension}.out", // 将要进行调试的程序的路径
+            "args": [
+                "baidu.com"
+            ], // 程序调试时传递给程序的命令行参数，一般设为空
+            "stopOnEntry": false, // 设为true时程序将暂停在程序入口处，相当于在main上打断点
+            "cwd": "${fileDirname}", // 调试程序时的工作目录，此为工作区文件夹；改成${fileDirname}可变为文件所在目录
+            "internalConsoleOptions": "neverOpen", // 如果不设为neverOpen，调试时会跳到“调试控制台”选项卡，你应该不需要对gdb/lldb手动输命令吧？
+            "preLaunchTask": "Compile" // 调试前执行的任务，一般为编译程序。与tasks.json的label相对应
+        }
+    ]
+}
