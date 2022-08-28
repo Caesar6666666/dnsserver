@@ -1,14 +1,13 @@
-server:
-	clang++ main.cpp -o ./bin/server -O2 -std=c++17 -Wall -g
+server: main.cpp client
+	sudo clang++ main.cpp -o ./bin/server -O2 -std=c++17 -Wall -g
 
-client.cpp:
-	clang++ client.cpp -o ./bin/client -O2 -std=c++17 -Wall -g
+client: client.cpp
+	sudo clang++ client.cpp -o ./bin/client -O2 -std=c++17 -Wall -g
 
-server:
-	./bin/server
+.PHONY:run
+run:
+	sudo ./bin/server
 
-client:
-	./bin/client bilibili.com
-
+.PHONY:clean
 clean:
 	rm -rf ./bin/*

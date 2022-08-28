@@ -210,13 +210,13 @@ public:
             dns_parse_name((unsigned char *)buffer, ptr, aname, &len);
             ptr += 2;
 
-            type = htons(*(unsigned short *)ptr);
+            type = ntohs(*(unsigned short *)ptr);
             ptr += 2;
 
-            qclass = htons(*(unsigned short *)ptr);
+            qclass = ntohs(*(unsigned short *)ptr);
             ptr += 2;
 
-            ttl = htons(*(unsigned short *)ptr);
+            ttl = ntohs(*(unsigned short *)ptr);
             ptr += 4;
 
             datalen = ntohs(*(unsigned short *)ptr);
@@ -233,6 +233,11 @@ public:
                     memcpy(netip, ptr, datalen);
                     inet_ntop(AF_INET, netip, ip, sizeof(sockaddr));
                     answer.push_back({aname, type, qclass, ttl, datalen, ip});
+                    auto ptr1 = (unsigned char *) ptr;
+                    for(int i = 0;i < datalen;i ++) {
+                        printf("%x ", *(ptr1+i));
+                    }
+                    printf("\n");
                     // std::cout << aname << " has address " << ip << '\n';
                     // std::cout << "\tTime to live: " << ttl / 60 << " minutes ," << ttl % 60 << " seconds\n";
 
