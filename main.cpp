@@ -179,14 +179,20 @@ public:
         auto offset = sizeof(dns_header);
         for (int i = 0; i < question.size(); i++) {
             memcpy(buff + offset, hostname_to_dnsname(question[i].name).c_str(), question[i].name.length() + 2);
-            offset += question[i].name.length();
+            offset += question[i].name.length() + 2;
             memcpy(buff + offset, &question[i].qtype, sizeof(question[i].qtype));
             offset += sizeof(question[i].qtype);
             memcpy(buff + offset, &question[i].qclass, sizeof(question[i].qclass));
             offset += sizeof(question[i].qclass);
         }
+        printf("_____________________\n");
+        for(int i = 0;i < 1024;i ++) {
+            printf("%d ", *(unsigned char*)(buff+i));
+        }
+        printf("\n");
 
         for (int i = 0; i < answer.size(); i++) {
+            std::cout << "answer size:" << answer.size() << '\n';
             memcpy(buff + offset, hostname_to_dnsname(answer[i].name).c_str(), answer[i].name.length() + 2);
             offset += answer[i].name.length() + 2;
             memcpy(buff + offset, &answer[i].atype, sizeof(answer[i].atype));
@@ -198,8 +204,14 @@ public:
             memcpy(buff + offset, &answer[i].datalen, sizeof(answer[i].datalen));
             offset += sizeof(answer[i].datalen);
             inet_pton(AF_INET, answer[i].ip.c_str(), buff + offset);
-            offset += answer[i].datalen;
+            offset += ntohs(answer[i].datalen);
         }
+
+        printf("_____________________\n");
+        for(int i = 0;i < 1024;i ++) {
+            printf("%d ", *(unsigned char*)(buff+i));
+        }
+        printf("\n");
         err_sys("build ok\n");
         return offset;
     }
@@ -234,6 +246,7 @@ public:
             len = 0;
 
             dns_parse_name((unsigned char *)buffer, ptr, aname, &len);
+
             ptr += 2;
 
             type = ntohs(*(unsigned short *)ptr);
@@ -258,6 +271,7 @@ public:
                 if (datalen == 4) {
                     memcpy(netip, ptr, datalen);
                     inet_ntop(AF_INET, netip, ip, sizeof(sockaddr));
+                    std::cout << type << ' ' << qclass << ' ' << ttl << ' ' << datalen << '\n';
                     answer.push_back({aname, htons(type), htons(qclass), htonl(ttl), htons(datalen), ip});
                     std::cout << aname << " has address " << ip << '\n';
                     std::cout << "\tTime to live: " << ttl / 60 << " minutes ," << ttl % 60 << " seconds\n";
@@ -332,13 +346,13 @@ auto dns_parse_request(char *buffer, dns_message &message) {
     ptr += 6;
 
     char aname[128];
-    int len;
+    int len = 0;
     unsigned short qtype, qclass;
     std::cout << id << ' ' << flags << ' ' << questions << ' ' << answers << '\n';
 
     for (int i = 0; i < questions; i++) {
-        for(int i = 0;i < 15;i ++) {
-            printf("%d ", (int) *(ptr+i));
+        for (int i = 0; i < 15; i++) {
+            printf("%d ", (int)*(ptr + i));
         }
         printf("\n");
         bzero(aname, sizeof(aname));
@@ -347,7 +361,7 @@ auto dns_parse_request(char *buffer, dns_message &message) {
         dns_parse_name((unsigned char *)buffer, ptr, aname, &len);
         std::cout << "dns_requestion   " << aname << '\n';
         ptr += len + 2;
-        printf("vvv %d \n", (int) *ptr);
+        printf("vvv %d \n", (int)*ptr);
         qtype = ntohs(*(unsigned short *)ptr);
         ptr += 2;
 
@@ -388,8 +402,9 @@ auto dns_server() {
         std::cout << "aaa" << '\n';
         message.dns_client_commit();
         std::cout << "bbb" << '\n';
-        message.dns_build_response();
-        sendto(listenfd, message.buff, strlen(message.buff), 0, (sockaddr *)&cliaddr, sizeof(cliaddr));
+        n = message.dns_build_response();
+        auto _ = sendto(listenfd, message.buff, n, 0, (sockaddr *)&cliaddr, sizeof(cliaddr));
+        std::cout << "send to client:" << _ << '\n';
         std::cout << "ccc" << '\n';
     }
     close(listenfd);
