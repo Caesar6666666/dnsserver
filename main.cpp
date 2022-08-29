@@ -11,7 +11,7 @@
 #include <vector>
 
 #define DNS_SERVER_PORT 53
-#define DNS_SERVER_IP "10.3.9.44"
+#define DNS_SERVER_IP "10.3.9.45"
 #define DNS_HOST 0x01
 #define DNS_CNAME 0x05
 #define LISTENQ 1024
@@ -163,6 +163,7 @@ public:
             memcpy(buff + offset, &question[i].qclass, sizeof(question[i].qclass));
             offset += sizeof(question[i].qclass);
         }
+
         err_sys("build ok\n");
         return offset;
     }
@@ -330,25 +331,29 @@ auto dns_parse_request(char *buffer, dns_message &message) {
     message.header.answers_num = *(unsigned short *)ptr;
     ptr += 6;
 
-    char cname[128], aname[128], ip[20], netip[4];
+    char aname[128];
     int len;
     unsigned short qtype, qclass;
+    std::cout << id << ' ' << flags << ' ' << questions << ' ' << answers << '\n';
 
     for (int i = 0; i < questions; i++) {
-        std::cout << "dns requestions" << questions << std::endl;
+        for(int i = 0;i < 15;i ++) {
+            printf("%d ", (int) *(ptr+i));
+        }
+        printf("\n");
         bzero(aname, sizeof(aname));
         len = 0;
 
         dns_parse_name((unsigned char *)buffer, ptr, aname, &len);
         std::cout << "dns_requestion   " << aname << '\n';
-        ptr += 2;
-
+        ptr += len + 2;
+        printf("vvv %d \n", (int) *ptr);
         qtype = ntohs(*(unsigned short *)ptr);
         ptr += 2;
 
         qclass = ntohs(*(unsigned short *)ptr);
         ptr += 2;
-
+        std::cout << aname << ' ' << qtype << ' ' << qclass << '\n';
         message.question.push_back({aname, htons(qtype), htons(qclass)});
     }
 
