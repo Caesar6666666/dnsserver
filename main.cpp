@@ -9,6 +9,8 @@
 #include <iostream>
 #include <unistd.h>
 #include <vector>
+#include <map>
+
 
 #define DNS_SERVER_PORT 53
 #define DNS_SERVER_IP "10.3.9.44"
@@ -39,12 +41,14 @@ struct dns_question {
 
 struct dns_answer {
     std::string name;
-    unsigned short atype;
-    unsigned short aclass;
-    unsigned int ttl;
-    unsigned short datalen;
+    unsigned short ntype;
+    unsigned short nclass;
+    unsigned int nttl;
+    unsigned short ndatalen;
     std::string ip;
 };
+
+std::map<std::string, std::vector<dns_answer>> dns_cache;
 
 auto hostname_to_dnsname(const std::string &name) {
     std::string retstring;
@@ -132,25 +136,22 @@ public:
 
         header.nflags = htons(0x0100);
         header.nquestions_num = htons(question_num);
-        err_sys("header ok\n");
+        // err_sys("header ok\n");
         return 0;
     }
 
     auto dns_create_question(std::vector<std::string> &hostname) {
         header.nquestions_num = htons(hostname.size());
-        dns_question question1;
-        for (int i = 0; i < hostname.size(); i++) {
-            question1.ntype = htons(1);
-            question1.nclass = htons(1);
-            question1.name = hostname[i];
-            question.push_back(question1);
+
+        for (auto it = hostname.begin(); it != hostname.end(); it ++) {
+            question.push_back({*it, htons(1), htons(1)});
         }
-        err_sys("qeustion ok\n");
+        // err_sys("qeustion ok\n");
     }
 
     auto dns_build_requestion() {
         if (question.empty()) {
-            err_sys("header or question or request error");
+            err_sys("question or request error");
             exit(0);
         }
         bzero(buff, sizeof(buff));
@@ -166,14 +167,14 @@ public:
             memcpy(buff + offset, &it->nclass, sizeof(it->nclass));
             offset += sizeof(it->nclass);
         }
-        err_sys("request build success\n");
+        // err_sys("request build success\n");
         return offset;
     }
 
-    auto dns_build_response() -> unsigned long {
+    auto dns_build_response() {
         if (answer.empty()) {
-            err_sys("answer error");
-            return 0;
+            err_sys("answer error\n");
+            return (unsigned long)0;
         }
 
         bzero(buff, sizeof(buff));
@@ -192,24 +193,24 @@ public:
         //     printf("%d ", *(unsigned char*)(buff+i));
         // }
         // printf("\n");
-        std::cout << "answer size:" << answer.size() << '\n';
+        // std::cout << "answer size:" << answer.size() << '\n';
         for (auto it = answer.begin(); it != answer.end(); it++) {
             memcpy(buff + offset, hostname_to_dnsname(it->name).c_str(), it->name.length() + 2);
             offset += it->name.length() + 2;
-            memcpy(buff + offset, &it->atype, sizeof(it->atype));
-            offset += sizeof(it->atype);
-            memcpy(buff + offset, &it->aclass, sizeof(it->aclass));
-            offset += sizeof(it->aclass);
-            memcpy(buff + offset, &it->ttl, sizeof(it->ttl));
-            offset += sizeof(it->ttl);
-            memcpy(buff + offset, &it->datalen, sizeof(it->datalen));
-            offset += sizeof(it->datalen);
+            memcpy(buff + offset, &it->ntype, sizeof(it->ntype));
+            offset += sizeof(it->ntype);
+            memcpy(buff + offset, &it->nclass, sizeof(it->nclass));
+            offset += sizeof(it->nclass);
+            memcpy(buff + offset, &it->nttl, sizeof(it->nttl));
+            offset += sizeof(it->nttl);
+            memcpy(buff + offset, &it->ndatalen, sizeof(it->ndatalen));
+            offset += sizeof(it->ndatalen);
             inet_pton(AF_INET, it->ip.c_str(), buff + offset);
-            offset += ntohs(it->datalen);
+            offset += ntohs(it->ndatalen);
         }
 
         // printf("_____________________\n");
-        // for(int i = 0;i < 1024;i ++) {
+        // for(int i = 0;i < 100;i ++) {
         //     printf("%d ", *(unsigned char*)(buff+i));
         // }
         // printf("\n");
@@ -217,9 +218,9 @@ public:
         return offset;
     }
 
-    auto dns_parse_response(char *buffer) {
-        std::cout << "dns parse response start\n";
-        auto ptr = (unsigned char *)buffer;
+    auto dns_parse_response(unsigned char *buffer) {
+        // std::cout << "dns parse response start\n";
+        auto ptr = buffer;
 
         ptr += 4;
         auto query_num = ntohs(*(unsigned short *)ptr);
@@ -228,7 +229,7 @@ public:
         auto answer_num = ntohs(*(unsigned short *)ptr);
         header.nanswers_num = htons(answer_num);
         ptr += 6;
-        std::cout << query_num << ' ' << answer_num << '\n';
+        // std::cout << query_num << ' ' << answer_num << '\n';
         for (int i = 0; i < query_num; i++) {
             for (;;) {
                 auto flag = (int)ptr[0];
@@ -243,13 +244,13 @@ public:
         int len;
         unsigned long ttl;
         unsigned short type, datalen, qclass;
-
+        std::string anamestring;
         for (int i = 0; i < answer_num; i++) {
             bzero(aname, sizeof(aname));
             len = 0;
 
             dns_parse_name((unsigned char *)buffer, ptr, aname, &len);
-
+            anamestring = aname;
             ptr += 2;
 
             type = ntohs(*(unsigned short *)ptr);
@@ -274,10 +275,12 @@ public:
                 if (datalen == 4) {
                     memcpy(netip, ptr, datalen);
                     inet_ntop(AF_INET, netip, ip, sizeof(sockaddr));
-                    std::cout << type << ' ' << qclass << ' ' << ttl << ' ' << datalen << '\n';
-                    answer.push_back({aname, htons(type), htons(qclass), htonl(ttl), htons(datalen), ip});
-                    std::cout << aname << " has address " << ip << '\n';
-                    std::cout << "\tTime to live: " << ttl / 60 << " minutes ," << ttl % 60 << " seconds\n";
+                    // std::cout << type << ' ' << qclass << ' ' << ttl << ' ' << datalen << '\n';
+                    answer.push_back({anamestring, htons(type), htons(qclass), htonl(ttl), htons(datalen), ip});
+
+                    dns_cache[anamestring].push_back({anamestring, htons(type), htons(qclass), htonl(ttl), htons(datalen), ip});
+                    // std::cout << aname << " has address " << ip << '\n';
+                    // std::cout << "\tTime to live: " << ttl / 60 << " minutes ," << ttl % 60 << " seconds\n";
 
                     // answers.push_back();
                 }
@@ -289,13 +292,13 @@ public:
         }
 
         ptr += 2;
-        std::cout << "dns parse response start\n";
+        // std::cout << "dns parse response start\n";
     }
 
     auto dns_client_commit() {
         auto sockfd = socket(AF_INET, SOCK_DGRAM, 0);
         if (sockfd < 0) {
-            err_sys("socket error");
+            err_sys("socket error\n");
             exit(0);
         }
 
@@ -306,61 +309,55 @@ public:
         servaddr.sin_addr.s_addr = inet_addr(DNS_SERVER_IP);
 
         auto ret = connect(sockfd, (sockaddr *)&servaddr, sizeof(servaddr));
-        if (ret == 0) {
-            std::cout << "connect success\n";
+        if (ret != 0) {
+            err_sys("connect error\n");
         }
 
-        auto length = dns_build_requestion();
+        auto && length = dns_build_requestion();
 
-        auto slen = sendto(sockfd, buff, length, 0, (sockaddr *)&servaddr, sizeof(sockaddr));
+        auto && slen = sendto(sockfd, buff, length, 0, (sockaddr *)&servaddr, sizeof(sockaddr));
         std::cout << "sendto server:" << slen << '\n';
-        char response[1024];
+
+        unsigned char response[1024];
         bzero(response, sizeof(response));
+
         sockaddr_in addr;
-        size_t addr_len = sizeof(sockaddr_in);
-        auto n = recvfrom(sockfd, response, sizeof(response), 0, (sockaddr *)&addr, (socklen_t *)&addr_len);
+        auto && addr_len = sizeof(sockaddr_in);
+        auto && n = recvfrom(sockfd, response, sizeof(response), 0, (sockaddr *)&addr, (socklen_t *)&addr_len);
         std::cout << "recvfrom server:" << n << '\n';
         // printf("_____________________\n");
         // for (int i = 0; i < 1024; i++) {
         //     printf("%d ", *(unsigned char *)(response + i));
         // }
-        // printf("\n");
-        // for (int i = 0; i < n; i++) {
-        //     printf("%c", response[i]);
-        // }
 
-        // for (int i = 0; i < n; i++) {
-        //     printf("%x", response[i]);
-        // }
         dns_parse_response(response);
         close(sockfd);
         return n;
     }
 };
 
-auto dns_parse_request(char *buffer, dns_message &message) {
-    std::cout << "dns parse request strat\n";
-    auto ptr = (unsigned char *)buffer;
-    auto id = ntohs(*(unsigned short *)ptr);
+auto dns_parse_request(unsigned char *buffer, dns_message &message) {
+    // std::cout << "dns parse request strat\n";
+    auto ptr = buffer;
+    auto && id = ntohs(*(unsigned short *)ptr);
     message.header.nid = *(unsigned short *)ptr;
     ptr += 2;
 
-    auto flags = ntohs(*(unsigned short *)ptr);
+    auto && flags = ntohs(*(unsigned short *)ptr);
     message.header.nflags = *(unsigned short *)ptr;
     ptr += 2;
 
-    auto questions = ntohs(*(unsigned short *)ptr);
+    auto && questions = ntohs(*(unsigned short *)ptr);
     message.header.nquestions_num = *(unsigned short *)ptr;
     ptr += 2;
 
-    auto answers = ntohs(*(unsigned short *)ptr);
+    auto && answers = ntohs(*(unsigned short *)ptr);
     message.header.nanswers_num = *(unsigned short *)ptr;
     ptr += 6;
 
     char aname[128];
     int len = 0;
-    unsigned short qtype, qclass;
-    std::cout << id << ' ' << flags << ' ' << questions << ' ' << answers << '\n';
+    std::cout << "question header" << id << ' ' << flags << ' ' << questions << ' ' << answers << '\n';
 
     for (int i = 0; i < questions; i++) {
         // for (int i = 0; i < 15; i++) {
@@ -370,21 +367,22 @@ auto dns_parse_request(char *buffer, dns_message &message) {
         bzero(aname, sizeof(aname));
         len = 0;
 
-        dns_parse_name((unsigned char *)buffer, ptr, aname, &len);
+        dns_parse_name(buffer, ptr, aname, &len);
         ptr += len + 2;
-        qtype = ntohs(*(unsigned short *)ptr);
+        auto && qtype = ntohs(*(unsigned short *)ptr);
         ptr += 2;
 
-        qclass = ntohs(*(unsigned short *)ptr);
+        auto && qclass = ntohs(*(unsigned short *)ptr);
         ptr += 2;
+
         std::cout << aname << ' ' << qtype << ' ' << qclass << '\n';
         message.question.push_back({aname, htons(qtype), htons(qclass)});
     }
-    std::cout << "dns parse request end\n";
+    // std::cout << "dns parse request end\n";
 }
 
 auto dns_server() {
-    auto listenfd = socket(AF_INET, SOCK_DGRAM, 0);
+    auto && listenfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (listenfd < 0) {
         err_sys("socket error");
         exit(0);
@@ -400,22 +398,37 @@ auto dns_server() {
         exit(0);
     }
 
-    socklen_t len;
     dns_message message;
+    unsigned char request[1024];
     for (;;) {
+        std::cout << "________________________________________\n";
         message.clear();
-        char request[1024];
         bzero(request, sizeof(request));
-        len = sizeof(cliaddr);
+        auto len = (unsigned int)sizeof(cliaddr);
         auto recv_len = recvfrom(listenfd, request, sizeof(request), 0, (sockaddr *)&cliaddr, &len);
-        char name[20];
-        inet_ntop(AF_INET, &cliaddr.sin_addr.s_addr, name, sizeof(sockaddr));
-        std::cout << "recvfrom:" << recv_len << ' ' << name << '\n';
+        // char name[20];
+        // inet_ntop(AF_INET, &cliaddr.sin_addr.s_addr, name, sizeof(sockaddr));
+        std::cout << "recvfrom:" << recv_len << '\n';
 
         dns_parse_request(request, message);
-        message.dns_client_commit();
-        auto response_len = message.dns_build_response();
-        auto send_len = sendto(listenfd, message.buff, response_len, 0, (sockaddr *)&cliaddr, sizeof(cliaddr));
+
+        for(auto it = message.question.begin();it != message.question.end();it ++) {
+            auto it_dns = dns_cache.find(it->name);
+            if(it_dns == dns_cache.end()) {
+                message.dns_client_commit();
+                break;
+            }
+            else {
+                std::cout << "cachecachecache\n";
+                for(auto it_cache_answer = it_dns->second.begin(); it_cache_answer != it_dns->second.end();it_cache_answer ++) {
+                    message.answer.push_back(*it_cache_answer);
+                }
+                message.header.nanswers_num = htons(it_dns->second.size());
+            }
+        }
+
+        auto && response_len = message.dns_build_response();
+        auto && send_len = sendto(listenfd, message.buff, response_len, 0, (sockaddr *)&cliaddr, sizeof(cliaddr));
         std::cout << "send to client:" << send_len << '\n';
     }
     close(listenfd);
